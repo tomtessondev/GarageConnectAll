@@ -36,9 +36,6 @@ async function main() {
         address: '15 Rue des Palmiers',
         city: 'Pointe-à-Pitre',
         postalCode: '97110',
-        vehicleBrand: 'Renault',
-        vehicleModel: 'Clio',
-        vehicleYear: 2018,
       },
     }),
     prisma.customer.create({
@@ -50,9 +47,6 @@ async function main() {
         address: '28 Boulevard Maritime',
         city: 'Basse-Terre',
         postalCode: '97100',
-        vehicleBrand: 'Peugeot',
-        vehicleModel: '208',
-        vehicleYear: 2020,
       },
     }),
     prisma.customer.create({
@@ -63,9 +57,6 @@ async function main() {
         address: '42 Avenue de la Plage',
         city: 'Le Gosier',
         postalCode: '97190',
-        vehicleBrand: 'Citroën',
-        vehicleModel: 'C3',
-        vehicleYear: 2019,
       },
     }),
   ]);

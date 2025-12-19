@@ -193,7 +193,7 @@ async function saveMessage(
       conversationId,
       sender,
       content,
-      metadata,
+      metadata: metadata as any,
     },
   });
 }
@@ -598,7 +598,7 @@ async function updateConversationMetadata(
   
   if (!conversation) return;
   
-  const currentMetadata = (conversation.metadata || conversation.context || {}) as Record<string, any>;
+  const currentMetadata = (conversation.context || {}) as Record<string, any>;
   
   await prisma.conversation.update({
     where: { id: conversationId },
@@ -623,6 +623,9 @@ async function executeToolCalls(
   const results: ToolCallResult[] = [];
 
   for (const toolCall of toolCalls) {
+    // Type guard: only process function tool calls
+    if (toolCall.type !== 'function') continue;
+    
     const functionName = toolCall.function.name;
     const args = JSON.parse(toolCall.function.arguments);
 
@@ -1105,9 +1108,11 @@ async function handleMessageAIFirst(
       // ⚡ PHASE 3 CRITICAL: Check if tool returned a pre-formatted confirmation message
       // If so, use it directly and BYPASS the 2nd GPT call (saves 6-7s!)
       const createOrderResult = results.find(r => r.functionName === 'create_order' && r.success);
-      if (createOrderResult && createOrderResult.result?.confirmationMessage) {
+      if (createOrderResult && createOrderResult.result && 
+          typeof createOrderResult.result === 'object' &&
+          'confirmationMessage' in createOrderResult.result) {
         console.log('⚡ PHASE 3: Using pre-formatted confirmation message - BYPASSING 2nd GPT call!');
-        const response = createOrderResult.result.confirmationMessage;
+        const response = (createOrderResult.result as any).confirmationMessage;
         
         // Refresh context
         const updatedContext = await buildRichContext(customer, conversation);

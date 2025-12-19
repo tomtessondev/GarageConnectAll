@@ -15,7 +15,7 @@ export async function GET(
             product: true,
           },
         },
-        user: true,
+        customer: true,
         pickupTracking: true,
       },
     });

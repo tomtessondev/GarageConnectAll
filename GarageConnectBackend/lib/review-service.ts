@@ -107,7 +107,7 @@ export async function saveReview(
       orderId,
       customerId: order.customerId,
       rating,
-      comment: comment || null,
+      comment: comment || undefined,
       isPublic: true,
     },
   });
@@ -156,7 +156,7 @@ export function parseReviewFromMessage(message: string): {
   const rating = parseInt(ratingMatch[1]);
 
   // Extract comment (everything after the rating)
-  let comment = message.replace(/[1-5]\s*-?\s*/, '').trim();
+  let comment: string | null = message.replace(/[1-5]\s*-?\s*/, '').trim();
   
   if (!comment || comment.length < 3) {
     comment = null;

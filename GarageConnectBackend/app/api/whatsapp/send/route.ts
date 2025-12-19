@@ -17,21 +17,36 @@ export async function POST(request: NextRequest) {
     // Envoyer le message
     const twilioMessage = await sendWhatsAppMessage(phoneNumber, message);
 
-    // Trouver l'utilisateur
-    const user = await prisma.user.findUnique({
+    // Trouver le client
+    const customer = await prisma.customer.findUnique({
       where: { phoneNumber },
     });
 
-    if (user) {
-      // Enregistrer la conversation
-      await prisma.whatsAppConversation.create({
+    if (customer) {
+      // Trouver ou créer une conversation active
+      let conversation = await prisma.conversation.findFirst({
+        where: {
+          customerId: customer.id,
+          status: 'active',
+        },
+      });
+
+      if (!conversation) {
+        conversation = await prisma.conversation.create({
+          data: {
+            customerId: customer.id,
+            phoneNumber,
+            state: 'idle',
+          },
+        });
+      }
+
+      // Enregistrer le message
+      await prisma.message.create({
         data: {
-          userId: user.id,
-          orderId: orderId || null,
-          messageText: message,
-          direction: 'outbound',
-          messageType: 'text',
-          twilioMessageSid: twilioMessage.sid,
+          conversationId: conversation.id,
+          sender: 'assistant',
+          content: message,
         },
       });
     }

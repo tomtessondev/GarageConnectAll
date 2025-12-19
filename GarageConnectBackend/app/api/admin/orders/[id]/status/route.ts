@@ -2,12 +2,13 @@ import { NextRequest } from 'next/server';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const authHeader = request.headers.get('authorization');
     console.log('📦 Order Status Update - Auth:', authHeader ? 'Present' : 'Missing');
-    console.log('📦 Order Status Update - Order ID:', params.id);
+    console.log('📦 Order Status Update - Order ID:', id);
 
     const body = await request.json();
     const { status } = body;
@@ -16,7 +17,7 @@ export async function PUT(
 
     // TODO: Mettre à jour la commande dans votre base de données
     // const updatedOrder = await db.orders.update({
-    //   where: { id: params.id },
+    //   where: { id },
     //   data: { status: status }
     // });
 
@@ -24,7 +25,7 @@ export async function PUT(
       success: true,
       message: 'Statut de la commande mis à jour avec succès',
       order: {
-        id: params.id,
+        id,
         status: status
       }
     });

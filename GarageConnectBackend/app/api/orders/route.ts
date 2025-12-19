@@ -20,13 +20,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = createOrderSchema.parse(body);
 
-    // Créer ou récupérer l'utilisateur
-    let user = await prisma.user.findUnique({
+    // Créer ou récupérer le client
+    let customer = await prisma.customer.findUnique({
       where: { phoneNumber: data.phoneNumber },
     });
 
-    if (!user) {
-      user = await prisma.user.create({
+    if (!customer) {
+      customer = await prisma.customer.create({
         data: {
           phoneNumber: data.phoneNumber,
           email: data.email,
@@ -67,9 +67,13 @@ export async function POST(request: NextRequest) {
     // Créer la commande
     const order = await prisma.order.create({
       data: {
-        userId: user.id,
+        customerId: customer.id,
         orderNumber,
+        subtotal: totalAmount,
         totalAmount,
+        deliveryAddress: customer.address || 'À définir',
+        deliveryCity: customer.city || 'Guadeloupe',
+        deliveryPostalCode: customer.postalCode || '97100',
         items: {
           create: orderItems,
         },
@@ -83,7 +87,7 @@ export async function POST(request: NextRequest) {
             product: true,
           },
         },
-        user: true,
+        customer: true,
       },
     });
 

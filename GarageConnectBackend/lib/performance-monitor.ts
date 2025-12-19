@@ -113,10 +113,10 @@ export class PerformanceMonitor {
 
     // Breakdown
     console.log('\n📋 Breakdown:');
-    console.log(`   🗄️  Database:  ${breakdown.database}ms (${((breakdown.database / totalDuration) * 100).toFixed(1)}%)`);
-    console.log(`   🤖 AI/GPT-4:   ${breakdown.ai}ms (${((breakdown.ai / totalDuration) * 100).toFixed(1)}%)`);
-    console.log(`   📱 Messaging:  ${breakdown.messaging}ms (${((breakdown.messaging / totalDuration) * 100).toFixed(1)}%)`);
-    console.log(`   ⚙️  Other:      ${breakdown.other}ms (${((breakdown.other / totalDuration) * 100).toFixed(1)}%)`);
+    console.log(`   🗄️  Database:  ${breakdown.database || 0}ms (${(((breakdown.database || 0) / totalDuration) * 100).toFixed(1)}%)`);
+    console.log(`   🤖 AI/GPT-4:   ${breakdown.ai || 0}ms (${(((breakdown.ai || 0) / totalDuration) * 100).toFixed(1)}%)`);
+    console.log(`   📱 Messaging:  ${breakdown.messaging || 0}ms (${(((breakdown.messaging || 0) / totalDuration) * 100).toFixed(1)}%)`);
+    console.log(`   ⚙️  Other:      ${breakdown.other || 0}ms (${(((breakdown.other || 0) / totalDuration) * 100).toFixed(1)}%)`);
 
     // Top lenteurs
     const sortedMetrics = [...this.metrics].sort((a, b) => b.duration - a.duration);
