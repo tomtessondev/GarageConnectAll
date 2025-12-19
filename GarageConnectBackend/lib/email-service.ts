@@ -1,13 +1,21 @@
 import { Resend } from 'resend';
 
-// Initialize Resend client
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend client (conditionally to avoid build errors)
+const resend = process.env.RESEND_API_KEY 
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 
 /**
  * Send order confirmation email
  */
 export async function sendOrderConfirmationEmail(order: any) {
   try {
+    // Check if Resend is configured
+    if (!resend) {
+      console.warn('Resend API key not configured, skipping email');
+      return;
+    }
+
     // Check if customer has email
     if (!order.customer || !order.customer.email) {
       console.warn('No customer email found for order:', order.orderNumber);
@@ -281,6 +289,12 @@ function generateOrderConfirmationHTML(order: any): string {
  */
 export async function sendPaymentFailedEmail(order: any, reason?: string) {
   try {
+    // Check if Resend is configured
+    if (!resend) {
+      console.warn('Resend API key not configured, skipping email');
+      return;
+    }
+
     if (!order.customer || !order.customer.email) {
       console.warn('No customer email found for order:', order.orderNumber);
       return;
