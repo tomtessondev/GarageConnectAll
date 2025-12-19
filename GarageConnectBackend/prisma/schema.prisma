@@ -1,0 +1,481 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// USERS & CUSTOMERS
+// ============================================
+
+// Admin users (dashboard)
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         String   @default("admin")
+  firstName    String?  @map("first_name")
+  lastName     String?  @map("last_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+// Customers (WhatsApp clients)
+model Customer {
+  id            String   @id @default(uuid())
+  phoneNumber   String   @unique @map("phone_number")
+  firstName     String?  @map("first_name")
+  lastName      String?  @map("last_name")
+  email         String?
+  address       String?
+  city          String?
+  postalCode    String?  @map("postal_code")
+  country       String   @default("Guadeloupe")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  conversations     Conversation[]
+  orders            Order[]
+  stockReservations StockReservation[]
+  carts             Cart[]
+  reviews           Review[]
+
+  @@map("customers")
+}
+
+// ============================================
+// PRODUCTS & INVENTORY
+// ============================================
+
+enum ProductCategory {
+  budget
+  standard
+  premium
+}
+
+enum ProductSeason {
+  summer
+  winter
+  all_season
+}
+
+enum ProductCondition {
+  new
+  premium
+  recycled
+}
+
+model Product {
+  id              String            @id @default(uuid())
+  sku             String            @unique
+  name            String
+  brand           String
+  model           String
+  width           Int
+  height          Int
+  diameter        Int
+  dimensions      String            // Ex: "205/55R16"
+  priceCost       Decimal?          @map("price_cost") @db.Decimal(10, 2)
+  priceRetail     Decimal           @map("price_retail") @db.Decimal(10, 2)
+  stockQuantity   Int               @default(0) @map("stock_quantity")
+  isOverstock     Boolean           @default(false) @map("is_overstock")
+  discountPercent Int?              @map("discount_percent")
+  condition       ProductCondition  @default(new)
+  category        ProductCategory   @default(standard)
+  season          ProductSeason     @default(all_season)
+  source          String            @default("local") // 'local', 'partner_api', 'partner_db'
+  externalId      String?           @map("external_id")
+  distributorId   Int?              @map("distributor_id")
+  specifications  Json?             // Détails techniques (JSONB)
+  imageUrl        String?           @map("image_url")
+  description     String?           @db.Text
+  lastSyncAt      DateTime?         @map("last_sync_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  orderItems        OrderItem[]
+  stockReservations StockReservation[]
+  cartItems         CartItem[]
+
+  @@index([dimensions])
+  @@index([brand])
+  @@index([category])
+  @@index([source])
+  @@index([stockQuantity])
+  @@map("products")
+}
+
+// Configuration des sources d'inventaire
+model InventorySource {
+  id          String    @id @default(uuid())
+  name        String
+  type        String    // 'api', 'database', 'local'
+  config      Json      // Configuration connexion (JSONB)
+  enabled     Boolean   @default(true)
+  priority    Int       @default(1) // Ordre consultation (1 = premier)
+  lastSyncAt  DateTime? @map("last_sync_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("inventory_sources")
+}
+
+// Réservations temporaires de stock (15 min)
+model StockReservation {
+  id         String    @id @default(uuid())
+  productId  String    @map("product_id")
+  quantity   Int
+  customerId String?   @map("customer_id")
+  orderId    String?   @map("order_id")
+  expiresAt  DateTime  @map("expires_at")
+  status     String    @default("pending") // pending, confirmed, expired, cancelled
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  product  Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id])
+  order    Order?    @relation(fields: [orderId], references: [id])
+
+  @@index([status])
+  @@index([expiresAt])
+  @@index([productId])
+  @@map("stock_reservations")
+}
+
+model Distributor {
+  id           Int       @id @default(autoincrement())
+  name         String
+  contactEmail String?   @map("contact_email")
+  apiKey       String?   @map("api_key")
+  lastSync     DateTime? @map("last_sync")
+  syncInterval Int       @default(3600) @map("sync_interval")
+
+  @@map("distributors")
+}
+
+// ============================================
+// CONVERSATIONS & MESSAGES (WhatsApp)
+// ============================================
+
+enum ConversationStatus {
+  active
+  completed
+  abandoned
+}
+
+model Conversation {
+  id         String             @id @default(uuid())
+  customerId String             @map("customer_id")
+  phoneNumber String            @map("phone_number")
+  state      String             // État dans le parcours client
+  context    Json?              // État du parcours (JSONB)
+  summary    String?            @db.Text
+  status     ConversationStatus @default(active)
+  startedAt  DateTime           @default(now()) @map("started_at")
+  endedAt    DateTime?          @map("ended_at")
+
+  customer Customer  @relation(fields: [customerId], references: [id])
+  messages Message[]
+  orders   Order[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([phoneNumber])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  sender         String   // 'user', 'assistant'
+  content        String   @db.Text
+  metadata       Json?    // Métadonnées supplémentaires (JSONB)
+  timestamp      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([timestamp])
+  @@map("messages")
+}
+
+// ============================================
+// ORDERS & PAYMENTS
+// ============================================
+
+enum OrderStatus {
+  pending
+  confirmed
+  paid
+  ready_pickup
+  completed
+  cancelled
+}
+
+enum PaymentMethod {
+  stripe
+  cod
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
+model Order {
+  id                    String        @id @default(uuid())
+  customerId            String        @map("customer_id")
+  conversationId        String?       @map("conversation_id")
+  orderNumber           String        @unique @map("order_number")
+  subtotal              Decimal       @db.Decimal(10, 2)
+  tax                   Decimal       @default(0) @db.Decimal(10, 2)
+  shipping              Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount           Decimal       @map("total_amount") @db.Decimal(10, 2)
+  status                OrderStatus   @default(pending)
+  paymentMethod         PaymentMethod? @map("payment_method")
+  paymentStatus         PaymentStatus @default(pending) @map("payment_status")
+  stripePaymentIntentId String?       @map("stripe_payment_intent_id")
+  stripeSessionId       String?       @map("stripe_session_id")
+  reminderSent          Boolean       @default(false) @map("reminder_sent")
+  deliveryAddress       String        @map("delivery_address") @db.Text
+  deliveryCity          String        @map("delivery_city")
+  deliveryPostalCode    String        @map("delivery_postal_code")
+  deliveryCountry       String        @default("Guadeloupe") @map("delivery_country")
+  scheduledPickupDate   DateTime?     @map("scheduled_pickup_date")
+  notes                 String?       @db.Text
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  customer          Customer           @relation(fields: [customerId], references: [id])
+  conversation      Conversation?      @relation(fields: [conversationId], references: [id])
+  items             OrderItem[]
+  payments          Payment[]
+  invoice           Invoice?
+  pickupTracking    PickupTracking?
+  stockReservations StockReservation[]
+  review            Review?
+
+  @@index([customerId])
+  @@index([status])
+  @@index([orderNumber])
+  @@index([paymentStatus])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String   @map("order_id")
+  productId String   @map("product_id")
+  quantity  Int
+  unitPrice Decimal  @map("unit_price") @db.Decimal(10, 2)
+  subtotal  Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model Payment {
+  id                      String        @id @default(uuid())
+  orderId                 String        @map("order_id")
+  amount                  Decimal       @db.Decimal(10, 2)
+  method                  PaymentMethod
+  status                  PaymentStatus @default(pending)
+  stripePaymentIntentId   String?       @map("stripe_payment_intent_id")
+  stripeChargeId          String?       @map("stripe_charge_id")
+  metadata                Json?         // Métadonnées Stripe (JSONB)
+  createdAt               DateTime      @default(now()) @map("created_at")
+  updatedAt               DateTime      @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@index([stripePaymentIntentId])
+  @@map("payments")
+}
+
+model Invoice {
+  id            String   @id @default(uuid())
+  orderId       String   @unique @map("order_id")
+  invoiceNumber String   @unique @map("invoice_number")
+  pdfUrl        String?  @map("pdf_url")
+  issuedAt      DateTime @default(now()) @map("issued_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceNumber])
+  @@map("invoices")
+}
+
+enum PickupStatus {
+  pending
+  picked_up
+  validated
+}
+
+model PickupTracking {
+  id               String        @id @default(uuid())
+  orderId          String        @unique @map("order_id")
+  status           PickupStatus  @default(pending)
+  pickedUpDate     DateTime?     @map("picked_up_date")
+  validatedDate    DateTime?     @map("validated_date")
+  warehouseStaffId String?       @map("warehouse_staff_id")
+  notes            String?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("pickup_tracking")
+}
+
+// ============================================
+// CART (PANIER)
+// ============================================
+
+model Cart {
+  id         String   @id @default(uuid())
+  customerId String   @map("customer_id")
+  expiresAt  DateTime @map("expires_at") // Expire après 24h
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  customer Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items    CartItem[]
+
+  @@index([customerId])
+  @@index([expiresAt])
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String   @map("cart_id")
+  productId String   @map("product_id")
+  quantity  Int
+  addedAt   DateTime @default(now()) @map("added_at")
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([cartId])
+  @@index([productId])
+  @@map("cart_items")
+}
+
+// ============================================
+// REVIEWS (AVIS CLIENTS)
+// ============================================
+
+model Review {
+  id         String   @id @default(uuid())
+  orderId    String   @map("order_id")
+  customerId String   @map("customer_id")
+  rating     Int      // 1-5 étoiles
+  comment    String?  @db.Text
+  isPublic   Boolean  @default(true) @map("is_public") // Visible sur site
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([orderId]) // Un seul avis par commande
+  @@index([customerId])
+  @@index([rating])
+  @@index([isPublic])
+  @@map("reviews")
+}
+
+// ============================================
+// SERVICES (ADMIN FLUTTER)
+// ============================================
+
+model Service {
+  id          String   @id @default(uuid())
+  name        String
+  description String?  @db.Text
+  price       Decimal  @db.Decimal(10, 2)
+  duration    Int?     // Durée en minutes
+  isActive    Boolean  @default(true) @map("is_active")
+  category    String?  // 'pneus', 'entretien', 'mecanique', etc.
+  imageUrl    String?  @map("image_url")
+  order       Int      @default(0) // Ordre d'affichage
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@index([category])
+  @@map("services")
+}
+
+// ============================================
+// BOT CONFIGURATION (ADMIN FLUTTER)
+// ============================================
+
+model BotConfig {
+  id                 String   @id @default(uuid())
+  name               String   // Nom de la configuration (ex: "Production v1.0")
+  systemPrompt       String   @db.Text // Prompt système pour GPT-4
+  welcomeMessage     String   @db.Text // Message d'accueil
+  availableActions   Json     // Actions disponibles: ["search", "cart", "orders", "help"]
+  minPrice           Decimal? @map("min_price") @db.Decimal(10, 2) // Prix minimum commande
+  maxPrice           Decimal? @map("max_price") @db.Decimal(10, 2) // Prix maximum commande
+  businessHours      Json?    @map("business_hours") // Horaires d'ouverture
+  autoReplyEnabled   Boolean  @default(true) @map("auto_reply_enabled")
+  maintenanceMode    Boolean  @default(false) @map("maintenance_mode")
+  maintenanceMessage String?  @db.Text @map("maintenance_message")
+  isActive           Boolean  @default(false) @map("is_active") // Une seule config active à la fois
+  version            String   @default("1.0")
+  createdBy          String?  @map("created_by") // ID de l'admin qui a créé
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@index([version])
+  @@map("bot_config")
+}
+
+// Configuration des messages automatiques
+model AutoMessage {
+  id          String   @id @default(uuid())
+  trigger     String   // Type de déclencheur: 'order_confirmed', 'payment_received', 'ready_pickup', 'review_request'
+  delayHours  Int      @default(0) @map("delay_hours") // Délai avant envoi (en heures)
+  template    String   @db.Text // Template du message avec variables {{orderNumber}}, {{customerName}}, etc.
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([trigger])
+  @@index([isActive])
+  @@map("auto_messages")
+}
+
+// Statistiques et analytics
+model Analytics {
+  id              String   @id @default(uuid())
+  date            DateTime @db.Date // Date du jour
+  totalMessages   Int      @default(0) @map("total_messages") // Messages reçus
+  totalOrders     Int      @default(0) @map("total_orders") // Commandes créées
+  totalRevenue    Decimal  @default(0) @map("total_revenue") @db.Decimal(10, 2) // Revenu total
+  avgRating       Decimal? @map("avg_rating") @db.Decimal(3, 2) // Note moyenne des avis
+  newCustomers    Int      @default(0) @map("new_customers") // Nouveaux clients
+  returningCustomers Int   @default(0) @map("returning_customers") // Clients récurrents
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([date])
+  @@index([date])
+  @@map("analytics")
+}

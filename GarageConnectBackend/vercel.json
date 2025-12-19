@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/clean-expired-carts",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/request-reviews",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
